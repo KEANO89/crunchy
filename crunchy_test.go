@@ -65,6 +65,16 @@ var (
 	}
 )
 
+func TestValidator(t *testing.T) {
+	v := NewValidator()
+
+	pw := "crunchy"
+	err := v.Check(pw)
+	if err == nil {
+		t.Errorf("Expected %v for password '%s', got nil", ErrTooShort, pw)
+	}
+}
+
 func TestRatePassword(t *testing.T) {
 	v := NewValidatorWithOpts(Options{
 		MinDist:        -1,
@@ -114,6 +124,6 @@ func BenchmarkValidatePassword(b *testing.B) {
 	s := hashsum(strconv.Itoa(b.N), md5.New())
 
 	for n := 0; n < b.N; n++ {
-		v.Check(s)
+		_ = v.Check(s)
 	}
 }

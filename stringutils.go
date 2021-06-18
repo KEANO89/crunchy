@@ -8,7 +8,6 @@
 package crunchy
 
 import (
-	"encoding/hex"
 	"hash"
 	"strings"
 	"unicode"
@@ -67,6 +66,6 @@ func normalize(s string) string {
 // hashsum returns the hashed sum of a string
 func hashsum(s string, hasher hash.Hash) string {
 	hasher.Reset()
-	hasher.Write([]byte(s))
-	return hex.EncodeToString(hasher.Sum(nil))
+	_, _ = hasher.Write([]byte(s))
+	return string(hasher.Sum(nil))
 }

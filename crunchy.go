@@ -8,9 +8,12 @@
 package crunchy
 
 import (
+	"bufio"
+	"encoding/hex"
 	"hash"
-	"io/ioutil"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"unicode"
@@ -42,14 +45,20 @@ type Options struct {
 	DictionaryPath string
 	// Check haveibeenpwned.com database
 	CheckHIBP bool
+	// MustContainDigit requires at least one digit for a valid password
+	MustContainDigit bool
+	// MustContainSymbol requires at least one special symbol for a valid password
+	MustContainSymbol bool
 }
 
 // NewValidator returns a new password validator with default settings
 func NewValidator() *Validator {
 	return NewValidatorWithOpts(Options{
-		MinDist:        -1,
-		DictionaryPath: "/usr/share/dict",
-		CheckHIBP:      false,
+		MinDist:           -1,
+		DictionaryPath:    "/usr/share/dict",
+		CheckHIBP:         false,
+		MustContainDigit:  false,
+		MustContainSymbol: false,
 	})
 }
 
@@ -84,13 +93,14 @@ func (v *Validator) indexDictionaries() {
 	}
 
 	for _, dict := range dicts {
-		buf, err := ioutil.ReadFile(dict)
+		file, err := os.Open(dict)
 		if err != nil {
 			continue
 		}
 
-		for _, word := range strings.Split(string(buf), "\n") {
-			nw := normalize(word)
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			nw := normalize(scanner.Text())
 			nwlen := len(nw)
 			if nwlen > v.wordsMaxLen {
 				v.wordsMaxLen = nwlen
@@ -106,6 +116,8 @@ func (v *Validator) indexDictionaries() {
 				v.hashedWords[hashsum(nw, hasher)] = nw
 			}
 		}
+
+		file.Close()
 	}
 }
 
@@ -129,8 +141,10 @@ func (v *Validator) foundInDictionaries(s string) error {
 	}
 
 	// find hashed dictionary entries
-	if word, ok := v.hashedWords[pw]; ok {
-		return &HashedDictionaryError{ErrHashedDictionary, word}
+	if pwindex, err := hex.DecodeString(pw); err == nil {
+		if word, ok := v.hashedWords[string(pwindex)]; ok {
+			return &HashedDictionaryError{ErrHashedDictionary, word}
+		}
 	}
 
 	// find mangled / reversed passwords
@@ -160,6 +174,20 @@ func (v *Validator) Check(password string) error {
 	}
 	if countUniqueChars(password) < v.options.MinDiff {
 		return ErrTooFewChars
+	}
+
+	if v.options.MustContainDigit {
+		validateDigit := regexp.MustCompile(`[0-9]+`)
+		if !validateDigit.MatchString(password) {
+			return ErrNoDigits
+		}
+	}
+
+	if v.options.MustContainSymbol {
+		validateSymbols := regexp.MustCompile(`[^\w\s]+`)
+		if !validateSymbols.MatchString(password) {
+			return ErrNoSymbols
+		}
 	}
 
 	// Inspired by cracklib
